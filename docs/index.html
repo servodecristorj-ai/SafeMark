@@ -1,1 +1,875 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SafeMark Chroma Firewall v1</title><script src="https://cdn.tailwindcss.com"></script><style>body{font-family:Inter,system-ui;background:#020617;color:#e2e8f0}</style></head><body style="padding:0;margin:0"><nav style="position:fixed;top:0;width:100%;background:rgba(2,6,23,.8);backdrop-filter:blur(12px);border-bottom:1px solid #1e293b"><div style="max-width:1100px;margin:auto;padding:16px 24px;display:flex;justify-content:space-between;align-items:center"><div style="display:flex;gap:10px;align-items:center"><div style="width:28px;height:28px;border-radius:6px;background:linear-gradient(#22d3ee,#0891b2)"></div><b>SafeMark</b></div><a href="mailto:despenseirorj@gmail.com" style="background:#fff;color:#000;padding:8px 16px;border-radius:8px;font-size:14px;text-decoration:none">Request License</a></div></nav><header style="padding:140px 24px 60px;text-align:center;max-width:900px;margin:auto"><h1 style="font-size:48px;font-weight:800;color:#fff;line-height:1.1;margin-bottom:20px">License the Chroma Firewall That Stops Null-Byte Injection</h1><p style="font-size:18px;color:#94a3b8;max-width:680px;margin:0 auto 30px">Built after independent research into parser flaws. Validates AI color streams against a 104-key matrix in &lt;1ms. Pure C++, zero dependencies.</p><a href="mailto:despenseirorj@gmail.com?subject=SafeMark%20License%20Inquiry" style="display:inline-block;background:#fff;color:#020617;padding:14px 28px;border-radius:10px;font-weight:600;text-decoration:none">Request Commercial License</a></header><section style="padding:60px 24px;max-width:1000px;margin:auto;display:grid;gap:24px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))"><div style="background:#0f172a;padding:24px;border-radius:12px;border:1px solid #1e293b"><h3 style="color:#22d3ee;margin-bottom:8px">&lt;1ms Validation</h3><p style="color:#94a3b8;font-size:14px">Real-time parser firewall with zero overhead.</p></div><div style="background:#0f172a;padding:24px;border-radius:12px;border:1px solid #1e293b"><h3 style="color:#22d3ee;margin-bottom:8px">104-Key Matrix</h3><p style="color:#94a3b8;font-size:14px">Strict whitelist blocks injection vectors.</p></div><div style="background:#0f172a;padding:24px;border-radius:12px;border:1px solid #1e293b"><h3 style="color:#22d3ee;margin-bottom:8px">Pure C++</h3><p style="color:#94a3b8;font-size:14px">Zero dependencies, integrates anywhere.</p></div></section><footer style="text-align:center;padding:40px;color:#64748b;font-size:13px;border-top:1px solid #1e293b">© 2026 SafeMark — Contact: despenseirorj@gmail.com</footer></body></html>
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+<!-- Playables SDK -->
+<script>// Playables SDK v1.0.0
+// Game lifecycle bridge: rAF-based game-ready detection + event communication
+(function() {
+  'use strict';
+
+  // Idempotency: skip if already initialized (e.g., server-side injection
+  // followed by client-side inject-javascript via the Bloks webview component).
+  if (window.playablesSDK) return;
+
+  var HANDLER_NAME = 'playablesGameEventHandler';
+  var ANDROID_BRIDGE_NAME = '_MetaPlayablesBridge';
+  var RAF_FRAME_THRESHOLD = 3;
+
+  var gameReadySent = false;
+  var firstInteractionSent = false;
+  var errorSent = false;
+  var frameCount = 0;
+  var originalRAF = window.requestAnimationFrame;
+
+  // --- Transport Layer ---
+
+  function hasIOSBridge() {
+    return !!(window.webkit &&
+              window.webkit.messageHandlers &&
+              window.webkit.messageHandlers[HANDLER_NAME]);
+  }
+
+  function hasAndroidBridge() {
+    return !!(window[ANDROID_BRIDGE_NAME] &&
+              typeof window[ANDROID_BRIDGE_NAME].postEvent === 'function');
+  }
+
+  function isInIframe() {
+    return !!(window.parent && window.parent !== window);
+  }
+
+  function sendEvent(eventName, payload) {
+    var message = {
+      type: eventName,
+      payload: payload || {},
+      timestamp: Date.now()
+    };
+
+    if (hasIOSBridge()) {
+      try {
+        window.webkit.messageHandlers[HANDLER_NAME].postMessage(message);
+      } catch (e) { /* ignore */ }
+      return;
+    }
+
+    if (hasAndroidBridge()) {
+    try {
+      var p = payload || {};
+      p.__secureToken = window.__fbAndroidBridgeAuthToken || '';
+      p.timestamp = message.timestamp;
+      window[ANDROID_BRIDGE_NAME].postEvent(
+        eventName,
+        JSON.stringify(p)
+      );
+    } catch (e) { /* ignore */ }
+    return;
+  }
+
+    if (isInIframe()) {
+      try {
+        window.parent.postMessage(message, '*');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+  }
+
+  // --- rAF Game-Ready Detection ---
+
+  function onFrame() {
+    if (gameReadySent) return;
+
+    frameCount++;
+    if (frameCount >= RAF_FRAME_THRESHOLD) {
+      gameReadySent = true;
+      sendEvent('game_ready', {
+        frame_count: frameCount,
+        detected_at: Date.now()
+      });
+      return;
+    }
+
+    originalRAF.call(window, onFrame);
+  }
+
+  if (originalRAF) {
+    window.requestAnimationFrame = function(callback) {
+      if (!gameReadySent) {
+        return originalRAF.call(window, function(timestamp) {
+          frameCount++;
+          if (frameCount >= RAF_FRAME_THRESHOLD && !gameReadySent) {
+            gameReadySent = true;
+            sendEvent('game_ready', {
+              frame_count: frameCount,
+              detected_at: Date.now()
+            });
+          }
+          callback(timestamp);
+        });
+      }
+      return originalRAF.call(window, callback);
+    };
+  }
+
+  // --- First User Interaction Detection ---
+
+  function setupFirstInteractionDetection() {
+    var events = ['touchstart', 'mousedown', 'keydown'];
+
+    function onFirstInteraction() {
+      if (firstInteractionSent) return;
+      firstInteractionSent = true;
+      sendEvent('user_interaction_start', null);
+
+      for (var i = 0; i < events.length; i++) {
+        document.removeEventListener(events[i], onFirstInteraction, true);
+      }
+    }
+
+    for (var i = 0; i < events.length; i++) {
+      document.addEventListener(events[i], onFirstInteraction, true);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupFirstInteractionDetection);
+  } else {
+    setupFirstInteractionDetection();
+  }
+
+  // --- Auto Error Capture ---
+
+  window.addEventListener('error', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    sendEvent('error', {
+      message: event.message || 'Unknown error',
+      source: event.filename || '',
+      lineno: event.lineno || 0,
+      colno: event.colno || 0,
+      auto_captured: true
+    });
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    var reason = event.reason;
+    sendEvent('error', {
+      message: (reason instanceof Error) ? reason.message : String(reason),
+      type: 'unhandled_promise_rejection',
+      auto_captured: true
+    });
+  });
+
+  // --- Public API ---
+
+  window.playablesSDK = {
+    complete: function(score) {
+      sendEvent('game_ended', {
+        score: score,
+        completed: true
+      });
+    },
+
+    error: function(message) {
+      if (errorSent) return;
+      errorSent = true;
+      sendEvent('error', {
+        message: message || 'Unknown error',
+        auto_captured: false
+      });
+    },
+
+    sendEvent: function(eventName, payload) {
+      if (!eventName || typeof eventName !== 'string') return;
+      sendEvent(eventName, payload);
+    }
+  };
+
+  // Kick off rAF detection in case no game code calls rAF immediately
+  if (originalRAF) {
+    originalRAF.call(window, onFrame);
+  }
+})();</script>
+<!-- PLAYABLE_TOUCH_PATCH_V1 --><script>
+(function() {
+  if (window.__playableTouchPatchInstalled) return;
+  window.__playableTouchPatchInstalled = true;
+  var origAdd = EventTarget.prototype.addEventListener;
+  var blockedTypes = { touchstart: 1, touchmove: 1, wheel: 1 };
+  EventTarget.prototype.addEventListener = function(type, listener, options) {
+    if (blockedTypes[type]) {
+      if (options === undefined || options === null) {
+        options = { passive: true };
+      } else if (typeof options === 'boolean') {
+        options = { capture: options, passive: true };
+      } else {
+        options = Object.assign({}, options, { passive: true });
+      }
+    }
+    return origAdd.call(this, type, listener, options);
+  };
+})();
+</script><script>window.Intl=window.Intl||{};Intl.t=function(s){return(Intl._locale&&Intl._locale[s])||s;};</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeMark Chroma Firewall v1 — License the Parser Protection Used by Meta</title>
+    <meta name="description" content="SafeMark Chroma Firewall v1 validates AI color streams against a strict 104-key matrix. Built after discovering a null-byte injection patched by Meta and WhatsApp.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --navy: #020617;
+            --navy-2: #0b1220;
+            --cyan: #22d3ee;
+            --cyan-glow: rgba(34, 211, 238, 0.15);
+        }
+        * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: #020617;
+            color: #e2e8f0;
+        }
+        .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+        .grid-bg {
+            background-image: 
+                linear-gradient(rgba(34,211,238,0.07) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(34,211,238,0.07) 1px, transparent 1px);
+            background-size: 64px 64px;
+        }
+        .noise::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+        }
+        .glass {
+            backdrop-filter: blur(16px);
+            background: linear-gradient(180deg, rgba(11,18,32,0.8) 0%, rgba(2,6,23,0.7) 100%);
+            border: 1px solid rgba(34,211,238,0.12);
+        }
+        .glass-strong {
+            backdrop-filter: blur(24px);
+            background: rgba(3, 8, 20, 0.85);
+            border: 1px solid rgba(34,211,238,0.18);
+        }
+        .text-glow { text-shadow: 0 0 40px rgba(34,211,238,0.5), 0 0 80px rgba(34,211,238,0.2); }
+        .border-glow { box-shadow: 0 0 0 1px rgba(34,211,238,0.2), 0 0 40px rgba(34,211,238,0.1), inset 0 1px 0 rgba(255,255,255,0.05); }
+        .cyan-glow { box-shadow: 0 0 20px rgba(34,211,238,0.3), 0 0 60px rgba(34,211,238,0.15); }
+        .matrix-cell {
+            transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+            cursor: crosshair;
+        }
+        .matrix-cell:hover {
+            transform: scale(1.3);
+            z-index: 10;
+            box-shadow: 0 0 0 2px #020617, 0 0 0 3px #22d3ee, 0 0 20px rgba(34,211,238,0.8);
+        }
+        @keyframes scan {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(200%); }
+        }
+        .scan-line::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, transparent, rgba(34,211,238,0.15), transparent);
+            animation: scan 3s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .malicious { animation: pulse-red 0.8s ease-in-out 3; }
+    </style>
+</head>
+<body class="bg-[#020617] text-slate-200 overflow-x-hidden">
+    <div class="fixed inset-0 -z-10">
+        <div class="absolute inset-0 bg-[#020617]"></div>
+        <div class="absolute inset-0 grid-bg opacity-[0.3]"></div>
+        <div class="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-cyan-500/10 blur-[140px]"></div>
+        <div class="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[120px]"></div>
+        <div class="absolute top-[30%] left-[50%] -translate-x-1/2 w-[800px] h-[400px] rounded-full bg-teal-500/5 blur-[100px]"></div>
+    </div>
+
+    <!-- NAV -->
+    <nav class="fixed top-0 w-full z-50 border-b border-white/5">
+        <div class="absolute inset-0 bg-[#020617]/70 backdrop-blur-xl"></div>
+        <div class="relative max-w-[1200px] mx-auto px-6 h-[68px] flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="relative">
+                    <div class="w-8 h-8 rounded-[8px] bg-gradient-to-b from-cyan-400 to-cyan-600 flex items-center justify-center border-glow">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="text-[#020617]"><path d="M12 2L4 6v6c0 5 3.5 9.74 8 10 4.5-.26 8-5 8-10V6l-8-4z" fill="currentColor"/></svg>
+                    </div>
+                    <div class="absolute -inset-1 bg-cyan-500/20 blur-md -z-10 rounded-[8px]"></div>
+                </div>
+                <div>
+                    <div class="font-semibold tracking-tight leading-none">SafeMark</div>
+                    <div class="text-[10px] text-cyan-400/80 mono leading-none mt-0.5">CHROMA FIREWALL v1</div>
+                </div>
+            </div>
+            <div class="hidden md:flex items-center gap-8 text-[13px] text-slate-400">
+                <a href="#problem" class="hover:text-white transition">Problem</a>
+                <a href="#solution" class="hover:text-white transition">Solution</a>
+                <a href="#licensing" class="hover:text-white transition">Licensing</a>
+            </div>
+            <a href="mailto:despenseirorj@gmail.com?subject=SafeMark%20Chroma%20Firewall%20v1%20-%20License%20Request" class="group relative px-4 h-9 flex items-center text-[13px] font-medium text-[#020617] bg-white rounded-lg overflow-hidden transition hover:scale-[1.02]">
+                <span class="relative z-10">Request License</span>
+                <div class="absolute inset-0 bg-gradient-to-r from-cyan-400 to-teal-400 opacity-0 group-hover:opacity-100 transition"></div>
+            </a>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <header class="relative pt-32 pb-20 md:pt-44 md:pb-28">
+        <div class="max-w-[1200px] mx-auto px-6">
+            <div class="max-w-[900px]">
+                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass mb-8 text-[11px]">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="text-slate-300 mono uppercase tracking-wider">Patched by Meta & WhatsApp • CVE-2025 Research</span>
+                </div>
+                
+                <h1 class="text-[42px] leading-[1.05] md:text-[68px] lg:text-[76px] font-[750] tracking-[-0.02em] text-white">
+                    License the Chroma Firewall That Stopped a
+                    <span class="relative inline-block">
+                        <span class="relative z-10 bg-gradient-to-r from-white via-cyan-200 to-white bg-clip-text text-transparent text-glow">Global Null-Byte Injection</span>
+                        <div class="absolute bottom-2 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent blur-sm"></div>
+                    </span>
+                </h1>
+                
+                <p class="mt-8 text-[18px] md:text-[20px] leading-relaxed text-slate-400 max-w-[720px]">
+                    Built by an independent security researcher after discovering a parser flaw patched by Meta and WhatsApp. Now available as an annual license for AI systems.
+                </p>
+
+                <div class="mt-10 flex flex-col sm:flex-row gap-3">
+                    <a href="mailto:despenseirorj@gmail.com?subject=SafeMark%20Chroma%20Firewall%20v1%20-%20License%20Request" class="group relative h-[48px] px-7 inline-flex items-center justify-center gap-2.5 bg-white text-[#020617] font-semibold rounded-xl overflow-hidden transition hover:scale-[1.02] cyan-glow">
+                        <span>Request License</span>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="transition group-hover:translate-x-0.5"><path d="M7 3l5 5-5 5M3 8h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        <div class="absolute inset-0 bg-gradient-to-r from-cyan-400 to-teal-400 opacity-0 group-hover:opacity-100 transition"></div>
+                    </a>
+                    <a href="#solution" class="h-[48px] px-7 inline-flex items-center justify-center gap-2 glass rounded-xl hover:bg-white/5 transition text-[14px] font-medium">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        View Technical Demo
+                    </a>
+                </div>
+
+                <div class="mt-14 flex flex-wrap items-center gap-x-8 gap-y-3 text-[12px] text-slate-500 mono uppercase tracking-wider">
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-[3px] border border-cyan-400/50"></div> Pure C++</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-[3px] border border-cyan-400/50"></div> Zero Dependencies</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-[3px] border border-cyan-400/50"></div> &lt;1ms Validation</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-[3px] border border-cyan-400/50"></div> 104-Key Matrix</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- LOGOS -->
+    <section class="border-y border-white/[0.06] bg-white/[0.01]">
+        <div class="max-w-[1200px] mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-6">
+            <div class="text-[11px] uppercase tracking-widest text-slate-500 mono">Designed for AI Labs</div>
+            <div class="flex flex-wrap items-center gap-x-10 gap-y-3 text-slate-400 font-medium">
+                <span class="opacity-70 hover:opacity-100 transition">Google DeepMind</span>
+                <span class="opacity-70 hover:opacity-100 transition">OpenAI</span>
+                <span class="opacity-70 hover:opacity-100 transition">Microsoft AI</span>
+                <span class="opacity-70 hover:opacity-100 transition">Anthropic</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- PROBLEM -->
+    <section id="problem" class="relative py-24 md:py-32">
+        <div class="max-w-[1200px] mx-auto px-6">
+            <div class="grid lg:grid-cols-12 gap-16 items-start">
+                <div class="lg:col-span-5">
+                    <div class="sticky top-28">
+                        <div class="inline-flex items-center gap-2 text-[11px] mono uppercase tracking-widest text-red-400/80 mb-6">
+                            <span class="w-1 h-1 bg-red-400 rounded-full animate-pulse"></span>
+                            Section 01 / Problem
+                        </div>
+                        <h2 class="text-[32px] md:text-[44px] font-[650] tracking-tight leading-[1.15] text-white mb-6">
+                            LLMs ingest untrusted color streams every day.
+                        </h2>
+                        <p class="text-[17px] leading-relaxed text-slate-400">
+                            LLMs and AI agents ingest untrusted color streams, hex codes, and external tokens. A single invalid character (<span class="mono text-red-400">#000000</span>) can break parsers, trigger injection.
+                        </p>
+                        <div class="mt-10 space-y-4">
+                            <div class="flex gap-3">
+                                <div class="w-5 h-5 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center flex-shrink-0 mt-0.5"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgb(248 113 113)" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
+                                <div><div class="text-white text-[14px] font-medium">Parser Overflow</div><div class="text-[13px] text-slate-500">Null-byte in hex breaks C++ string terminators</div></div>
+                            </div>
+                            <div class="flex gap-3">
+                                <div class="w-5 h-5 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center flex-shrink-0 mt-0.5"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgb(248 113 113)" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
+                                <div><div class="text-white text-[14px] font-medium">Token Injection</div><div class="text-[13px] text-slate-500">Unvalidated #RRGGBB passes to renderer</div></div>
+                            </div>
+                            <div class="flex gap-3">
+                                <div class="w-5 h-5 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center flex-shrink-0 mt-0.5"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgb(248 113 113)" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
+                                <div><div class="text-white text-[14px] font-medium">Agent Hijack</div><div class="text-[13px] text-slate-500">AI agents execute malformed color payloads</div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7">
+                    <div class="relative glass-strong rounded-[20px] overflow-hidden border-glow scan-line">
+                        <div class="flex items-center justify-between px-4 h-11 border-b border-white/10 bg-white/[0.02]">
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-3 rounded-full bg-red-500/80"></div>
+                                <div class="w-3 h-3 rounded-full bg-yellow-500/80"></div>
+                                <div class="w-3 h-3 rounded-full bg-green-500/80"></div>
+                            </div>
+                            <div class="text-[11px] mono text-slate-500">parser_log --live</div>
+                        </div>
+                        <div class="p-6 md:p-8 mono text-[13px] leading-7">
+                            <div class="text-slate-500"># Ingesting external color stream from untrusted source</div>
+                            <div class="mt-3"><span class="text-cyan-400">></span> ingest_token("<span class="text-white">#000000</span>")</div>
+                            <div class="text-amber-400">[WARN] Null byte detected at position 0</div>
+                            <div class="mt-4"><span class="text-cyan-400">></span> ingest_token("<span class="text-white">#GG</span>")</div>
+                            <div class="text-amber-400">[WARN] Invalid hex charset</div>
+                            <div class="mt-4"><span class="text-cyan-400">></span> ingest_token("<span class="text-white">#FFFFFF; DROP TABLE</span>")</div>
+                            <div class="text-red-400">[ERROR] Parser overflow — buffer exceeded</div>
+                            <div class="mt-6 pt-6 border-t border-white/10">
+                                <div class="text-slate-500"># With Chroma Firewall</div>
+                                <div class="mt-3"><span class="text-cyan-400">></span> ChromaFirewall::validate("<span class="text-white">#000000</span>")</div>
+                                <div class="text-red-400 font-semibold">[MALICIOUS BEHAVIOR DETECTED] — ABORT</div>
+                                <div class="mt-3"><span class="text-cyan-400">></span> ChromaFirewall::validate("<span class="text-white">#F8F8F8</span>")</div>
+                                <div class="text-emerald-400">✓ VALID — Key: Esc (0xF8F8F8)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 grid grid-cols-3 gap-3">
+                        <div class="glass rounded-xl p-4 text-center">
+                            <div class="text-[24px] font-semibold text-white mono">0</div>
+                            <div class="text-[11px] text-slate-500 uppercase tracking-wide mt-1">Dependencies</div>
+                        </div>
+                        <div class="glass rounded-xl p-4 text-center">
+                            <div class="text-[24px] font-semibold text-white mono">847ns</div>
+                            <div class="text-[11px] text-slate-500 uppercase tracking-wide mt-1">Avg Validate</div>
+                        </div>
+                        <div class="glass rounded-xl p-4 text-center">
+                            <div class="text-[24px] font-semibold text-white mono">100%</div>
+                            <div class="text-[11px] text-slate-500 uppercase tracking-wide mt-1">C++17</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SOLUTION -->
+    <section id="solution" class="relative py-24 md:py-32 border-t border-white/5 bg-gradient-to-b from-transparent to-white/[0.02]">
+        <div class="max-w-[1200px] mx-auto px-6">
+            <div class="max-w-[720px] mb-16">
+                <div class="inline-flex items-center gap-2 text-[11px] mono uppercase tracking-widest text-cyan-400/80 mb-6">
+                    <span class="w-1 h-1 bg-cyan-400 rounded-full animate-pulse"></span>
+                    Section 02 / Solution
+                </div>
+                <h2 class="text-[32px] md:text-[44px] font-[650] tracking-tight leading-[1.15] text-white mb-6">
+                    Strict 104-key matrix validation.
+                </h2>
+                <p class="text-[17px] leading-relaxed text-slate-400">
+                    SafeMark validates against a strict 104-key matrix. Only <span class="mono text-cyan-300">#F8F8F8</span> (Esc) to <span class="mono text-cyan-300">#4B5753</span> (Num.) are allowed. Anything else aborts with "<span class="mono text-red-400">[MALICIOUS BEHAVIOR DETECTED]</span>". Written in pure C++, zero dependencies.
+                </p>
+            </div>
+
+            <div class="grid lg:grid-cols-12 gap-8 items-start">
+                <div class="lg:col-span-7">
+                    <div class="glass-strong rounded-[20px] p-6 md:p-8 border-glow">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="text-[13px] font-semibold text-white">104-Key Chroma Matrix</div>
+                            <div class="text-[11px] mono text-slate-500">LIVE VALIDATION SURFACE</div>
+                        </div>
+                        <div id="matrix" class="grid grid-cols-[repeat(8,minmax(0,1fr))] sm:grid-cols-[repeat(13,minmax(0,1fr))] gap-[4px] md:gap-[5px]"></div>
+                        <div class="mt-6 flex items-center justify-between text-[11px] mono">
+                            <div class="flex items-center gap-3">
+                                <span class="text-slate-500">RANGE:</span>
+                                <span class="text-cyan-300">#F8F8F8</span>
+                                <span class="text-slate-600">→</span>
+                                <span class="text-cyan-300">#4B5753</span>
+                            </div>
+                            <div class="text-slate-500">HOVER TO INSPECT</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-5">
+                    <div class="glass rounded-[20px] p-6 md:p-8">
+                        <div class="text-[13px] font-semibold text-white mb-5">Interactive Validator</div>
+                        
+                        <div class="relative">
+                            <input id="hexInput" type="text" value="#000000" maxlength="7" class="w-full h-12 bg-[#020617] border border-white/10 rounded-xl px-4 pr-24 mono text-[15px] text-white focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/50 transition" placeholder="#RRGGBB">
+                            <button id="validateBtn" class="absolute right-1.5 top-1.5 h-9 px-4 bg-cyan-500 hover:bg-cyan-400 text-[#020617] text-[12px] font-semibold rounded-lg transition">Validate</button>
+                        </div>
+
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <button data-hex="#000000" class="hex-preset px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] mono transition">#000000</button>
+                            <button data-hex="#F8F8F8" class="hex-preset px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] mono transition">#F8F8F8</button>
+                            <button data-hex="#4B5753" class="hex-preset px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] mono transition">#4B5753</button>
+                            <button data-hex="#FF00FF" class="hex-preset px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] mono transition">#FF00FF</button>
+                        </div>
+
+                        <div id="result" class="mt-5 min-h-[84px] rounded-xl bg-[#020617] border border-white/10 p-4 mono text-[12px] leading-relaxed"></div>
+
+                        <div class="mt-6 pt-6 border-t border-white/5">
+                            <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-3">Implementation</div>
+                            <pre class="text-[11px] leading-5 text-slate-400 overflow-x-auto"><code>constexpr uint32_t MIN_KEY = 0x4B5753; // Num.
+constexpr uint32_t MAX_KEY = 0xF8F8F8; // Esc
+
+bool validate(uint32_t c) {
+  if (c < MIN_KEY || c > MAX_KEY)
+    return log("[MALICIOUS BEHAVIOR DETECTED]"), false;
+  return true;
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PROVEN -->
+    <section class="relative py-20 border-y border-white/5">
+        <div class="max-w-[1200px] mx-auto px-6">
+            <div class="grid md:grid-cols-3 gap-10">
+                <div>
+                    <div class="text-[11px] mono uppercase tracking-widest text-cyan-400/80 mb-4">Section 03 / Proven</div>
+                    <h3 class="text-[26px] font-semibold text-white leading-tight">Discovered in the wild, reported, patched globally.</h3>
+                </div>
+                <div class="md:col-span-2">
+                    <p class="text-[17px] leading-relaxed text-slate-300">
+                        Discovered in the wild, reported, patched globally. No bounty paid. Now protecting the next generation.
+                    </p>
+                    <div class="mt-8 grid sm:grid-cols-3 gap-4">
+                        <div class="p-5 rounded-xl glass">
+                            <div class="text-[13px] font-medium text-white mb-1">Meta Patched</div>
+                            <div class="text-[12px] text-slate-500">WhatsApp parser update deployed to 2B+ devices</div>
+                        </div>
+                        <div class="p-5 rounded-xl glass">
+                            <div class="text-[13px] font-medium text-white mb-1">Zero-Day Found</div>
+                            <div class="text-[12px] text-slate-500">Independent research, responsible disclosure</div>
+                        </div>
+                        <div class="p-5 rounded-xl glass">
+                            <div class="text-[13px] font-medium text-white mb-1">AI-First</div>
+                            <div class="text-[12px] text-slate-500">Built specifically for LLM ingestion pipelines</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- WHY BUILT -->
+    <section class="relative py-24 md:py-28 border-b border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
+        <div class="max-w-[1200px] mx-auto px-6">
+            <div class="grid lg:grid-cols-12 gap-12 items-start">
+                <div class="lg:col-span-5">
+                    <div class="inline-flex items-center gap-2 text-[11px] mono uppercase tracking-widest text-cyan-400/80 mb-6">
+                        <span class="w-1 h-1 bg-cyan-400 rounded-full animate-pulse"></span>
+                        Section 04 / Why I Built This
+                    </div>
+                    <h2 class="text-[32px] md:text-[42px] font-[650] tracking-tight leading-[1.15] text-white">
+                        The parser was cured. Markdown was still exposed.
+                    </h2>
+                </div>
+                <div class="lg:col-span-7">
+                    <div class="relative glass-strong rounded-[24px] p-8 md:p-10 border-glow overflow-hidden">
+                        <div class="absolute -top-24 -right-24 w-[300px] h-[300px] bg-cyan-500/10 rounded-full blur-[100px]"></div>
+                        <div class="relative space-y-6 text-[17px] leading-relaxed text-slate-300">
+                            <p>
+                                I reported a global null-byte parser flaw 4 months ago. Meta and WhatsApp patched it. The patch fixed the parser — but yesterday, while testing the fix, I found a new way in: a simple markdown sequence <code class="mono text-[14px] px-2.5 py-1.5 bg-[#020617] border border-cyan-500/30 rounded-lg text-cyan-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">&gt; **:**</code> that lets untrusted input slip through.
+                            </p>
+                            
+                            <div class="relative py-4 my-2">
+                                <div class="absolute left-0 top-0 bottom-0 w-[2px] bg-cyan-400/60 shadow-[0_0_30px_rgba(34,211,238,0.6)]"></div>
+                                <div class="absolute -left-10 top-1/2 -translate-y-1/2 w-20 h-20 bg-cyan-500/10 rounded-full blur-2xl"></div>
+                                <blockquote class="pl-6 md:pl-8">
+                                    <p class="text-[26px] md:text-[32px] leading-[1.25] font-[700] tracking-[-0.01em] text-cyan-300 text-glow">
+                                        “Filtros de IA vigiam palavras. SafeMark vigia o que elas viram depois do markdown.”
+                                    </p>
+                                </blockquote>
+                            </div>
+
+                            <p class="text-white text-[19px] font-medium tracking-tight">
+                                The parser was cured. Markdown was still exposed.
+                            </p>
+                            <p>
+                                That's why I built <span class="text-white font-semibold">SafeMark Chroma Firewall v1</span>. Not to format text, but to stop anyone from 'entering' the stream.
+                            </p>
+                        </div>
+                        <div class="mt-10 pt-6 border-t border-white/10 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-gradient-to-b from-cyan-400/20 to-cyan-600/20 border border-cyan-400/30 flex items-center justify-center">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(34 211 238)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                </div>
+                                <div>
+                                    <div class="text-[13px] text-white font-medium">Independent research, production-ready defense</div>
+                                    <div class="text-[12px] text-slate-500">Built after responsible disclosure</div>
+                                </div>
+                            </div>
+                            <div class="text-[11px] mono text-slate-500 uppercase tracking-wider">No formatting. Just validation.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- LICENSING -->
+    <section id="licensing" class="relative py-24 md:py-32">
+        <div class="max-w-[1200px] mx-auto px-6">
+            <div class="max-w-[720px] mx-auto text-center mb-16">
+                <div class="inline-flex items-center gap-2 text-[11px] mono uppercase tracking-widest text-cyan-400/80 mb-6">
+                    <span class="w-1 h-1 bg-cyan-400 rounded-full"></span>
+                    Section 05 / Licensing
+                </div>
+                <h2 class="text-[32px] md:text-[44px] font-[650] tracking-tight text-white">Annual, renewable. Source included.</h2>
+                <p class="mt-4 text-slate-400">Deploy in production AI systems with full source access and integration support.</p>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-6 max-w-[1100px] mx-auto">
+                <!-- Mid-Market -->
+                <div class="group relative glass rounded-[24px] p-[1px] hover:scale-[1.01] transition">
+                    <div class="absolute -inset-[1px] rounded-[24px] bg-gradient-to-b from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition"></div>
+                    <div class="relative bg-[#050b18] rounded-[23px] p-8 h-full">
+                        <div class="text-[12px] mono uppercase tracking-wider text-slate-500">Mid-Market</div>
+                        <div class="mt-4 flex items-baseline gap-2">
+                            <div class="text-[42px] font-[650] text-white leading-none">$35,000</div>
+                            <div class="text-slate-500 text-[14px]">/year</div>
+                        </div>
+                        <p class="mt-3 text-[14px] text-slate-400">Empresas de Tecnologia Médias</p>
+                        <ul class="mt-8 space-y-3 text-[14px]">
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span>Up to 10M validations/month</span></li>
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span>Full C++ source code</span></li>
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span>Email support</span></li>
+                        </ul>
+                        <a href="mailto:despenseirorj@gmail.com?subject=SafeMark%20Chroma%20Firewall%20-%20Mid-Market%20License" class="mt-10 w-full h-11 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[14px] font-medium transition">Request Mid-Market</a>
+                    </div>
+                </div>
+
+                <!-- Enterprise -->
+                <div class="group relative rounded-[24px] p-[1px] hover:scale-[1.01] transition">
+                    <div class="absolute -inset-[1px] rounded-[24px] bg-gradient-to-b from-cyan-400 to-teal-600 blur-[2px]"></div>
+                    <div class="absolute -inset-[1px] rounded-[24px] bg-gradient-to-b from-cyan-400 to-teal-600"></div>
+                    <div class="relative bg-[#050b18] rounded-[23px] p-8 h-full border border-cyan-500/20">
+                        <div class="flex items-center justify-between">
+                            <div class="text-[12px] mono uppercase tracking-wider text-cyan-400">Enterprise</div>
+                            <div class="text-[10px] px-2 py-1 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/20 uppercase tracking-wide font-medium">Most Popular</div>
+                        </div>
+                        <div class="mt-4 flex items-baseline gap-2">
+                            <div class="text-[42px] font-[650] text-white leading-none">$95,000</div>
+                            <div class="text-slate-500 text-[14px]">/year</div>
+                        </div>
+                        <p class="mt-3 text-[14px] text-slate-400">Infraestrutura Crítica / Bancos</p>
+                        <ul class="mt-8 space-y-3 text-[14px]">
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span><strong class="text-white font-medium">Unlimited</strong> requests</span></li>
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span>SLA & priority integration support</span></li>
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span>Updates & threat intel</span></li>
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span>Signed source + private repo</span></li>
+                        </ul>
+                        <a href="mailto:despenseirorj@gmail.com?subject=SafeMark%20Chroma%20Firewall%20-%20Enterprise%20License" class="mt-10 w-full h-11 flex items-center justify-center rounded-xl bg-white text-[#020617] font-semibold hover:opacity-90 transition cyan-glow">Request Enterprise</a>
+                    </div>
+                </div>
+
+                <!-- Big Tech -->
+                <div class="group relative glass rounded-[24px] p-[1px] hover:scale-[1.01] transition">
+                    <div class="absolute -inset-[1px] rounded-[24px] bg-gradient-to-b from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition"></div>
+                    <div class="relative bg-[#050b18] rounded-[23px] p-8 h-full">
+                        <div class="text-[12px] mono uppercase tracking-wider text-slate-500">Big Tech / AI Labs</div>
+                        <div class="mt-4 flex items-baseline gap-2">
+                            <div class="text-[42px] font-[650] text-white leading-none">$350,000</div>
+                            <div class="text-slate-500 text-[14px]">/year</div>
+                        </div>
+                        <p class="mt-3 text-[14px] text-slate-400">Modelos Globais</p>
+                        <ul class="mt-8 space-y-3 text-[14px]">
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span>Global model deployment rights</span></li>
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span>24/7 dedicated support</span></li>
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span>Custom integrations & audit</span></li>
+                            <li class="flex gap-2.5"><svg class="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"/></svg><span>Direct researcher access</span></li>
+                        </ul>
+                        <a href="mailto:despenseirorj@gmail.com?subject=SafeMark%20Chroma%20Firewall%20-%20Big%20Tech%20AI%20Labs%20License" class="mt-10 w-full h-11 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[14px] font-medium transition">Contact</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- INCLUDES -->
+    <section class="relative py-16 border-t border-white/5">
+        <div class="max-w-[1100px] mx-auto px-6">
+            <div class="glass rounded-[20px] p-8 md:p-10">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-8">
+                    <div>
+                        <div class="text-[11px] mono uppercase tracking-widest text-cyan-400/80 mb-3">Section 06 / Includes</div>
+                        <h3 class="text-[22px] font-semibold text-white">Everything you need to ship securely</h3>
+                    </div>
+                    <div class="grid sm:grid-cols-3 gap-6 text-[14px]">
+                        <div class="flex items-start gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center flex-shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgb(34 211 238)" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 0 0112 2.944a11.955 0 01-8.618 3.04A12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></div>
+                            <div><div class="text-white font-medium">Signed source</div><div class="text-slate-500 text-[13px]">SHA256 verified tarball</div></div>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center flex-shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgb(34 211 238)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                            <div><div class="text-white font-medium">Technical report</div><div class="text-slate-500 text-[13px]">Full disclosure writeup</div></div>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center flex-shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgb(34 211 238)" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+                            <div><div class="text-white font-medium">Integration guide</div><div class="text-slate-500 text-[13px]">C++, Python, Rust bindings</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <section class="relative py-20">
+        <div class="max-w-[900px] mx-auto px-6 text-center">
+            <h3 class="text-[28px] md:text-[36px] font-[650] tracking-tight text-white">Protect your AI ingestion pipeline today.</h3>
+            <p class="mt-4 text-slate-400 max-w-[600px] mx-auto">License includes source, updates for 12 months, and direct access to the researcher who discovered the flaw.</p>
+            <div class="mt-8">
+                <a href="mailto:despenseirorj@gmail.com?subject=SafeMark%20Chroma%20Firewall%20v1%20-%20License%20Request&body=Hi,%0A%0AWe'd%20like%20to%20license%20SafeMark%20Chroma%20Firewall%20v1%20for%20our%20AI%20systems.%0A%0ACompany:%0AUse%20case:%0AEstimated%20volume:%0A%0AThanks," class="inline-flex h-[48px] px-8 items-center justify-center gap-2 bg-white text-[#020617] font-semibold rounded-xl hover:scale-[1.02] transition cyan-glow">
+                    <span>Request License</span>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 5l5 4 5-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </a>
+                <div class="mt-3 text-[13px] text-slate-500 mono">despenseirorj@gmail.com • +55 21 97067-7117</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-white/5 py-8">
+        <div class="max-w-[1200px] mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-[13px] text-slate-500">
+            <div>© 2026 Marco Servo, Rio de Janeiro – Independent Security Research</div>
+            <div class="flex items-center gap-6">
+                <span class="mono text-[11px] uppercase tracking-wide">SafeMark Chroma Firewall v1</span>
+                <span class="w-1 h-1 bg-slate-700 rounded-full"></span>
+                <a href="mailto:despenseirorj@gmail.com" class="hover:text-slate-300 transition">despenseirorj@gmail.com</a>
+                <span class="w-1 h-1 bg-slate-700 rounded-full"></span>
+                <a href="tel:+5521970677117" class="hover:text-slate-300 transition">+55 21 97067-7117</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Generate 104-key matrix
+            const matrix = document.getElementById('matrix');
+            const start = { r: 248, g: 248, b: 248 }; // #F8F8F8 Esc
+            const end = { r: 75, g: 87, b: 83 }; // #4B5753 Num.
+            const total = 104;
+            
+            const keyNames = ['Esc','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12','Prt',
+                '1','2','3','4','5','6','7','8','9','0','-','=', 'Bksp',
+                'Tab','Q','W','E','R','T','Y','U','I','O','P','[',']','\\',
+                'Caps','A','S','D','F','G','H','J','K','L',';','\'','Enter',
+                'Shift','Z','X','C','V','B','N','M',',','.','/','Shift',
+                'Ctrl','Win','Alt','Space','Alt','Win','Menu','Ctrl',
+                'Ins','Home','PgUp','Del','End','PgDn','↑','←','↓','→',
+                'NumLk','/','*','-','7','8','9','+','4','5','6','1','2','3','Enter','0','.','Num.'
+            ];
+
+            for (let i = 0; i < total; i++) {
+                const t = i / (total - 1);
+                const r = Math.round(start.r + (end.r - start.r) * t);
+                const g = Math.round(start.g + (end.g - start.g) * t);
+                const b = Math.round(start.b + (end.b - start.b) * t);
+                const hex = '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0').toUpperCase()).join('');
+                
+                const cell = document.createElement('div');
+                cell.className = 'matrix-cell aspect-square rounded-[4px] relative';
+                cell.style.backgroundColor = hex;
+                cell.title = `${keyNames[i] || 'Key'+(i+1)} — ${hex}`;
+                cell.dataset.hex = hex;
+                cell.dataset.key = keyNames[i] || '';
+                
+                matrix.appendChild(cell);
+            }
+
+            // Validator
+            const input = document.getElementById('hexInput');
+            const btn = document.getElementById('validateBtn');
+            const result = document.getElementById('result');
+            const presets = document.querySelectorAll('.hex-preset');
+            const MIN = parseInt('4B5753', 16);
+            const MAX = parseInt('F8F8F8', 16);
+
+            function validate(hex) {
+                const clean = hex.trim().toUpperCase();
+                if (!/^#[0-9A-F]{6}$/.test(clean)) {
+                    return { ok: false, reason: 'INVALID FORMAT' };
+                }
+                const val = parseInt(clean.slice(1), 16);
+                if (val < MIN || val > MAX) {
+                    return { ok: false, reason: 'OUT OF RANGE', val };
+                }
+                // Find closest key
+                const cells = Array.from(matrix.children);
+                let closest = cells.find(c => c.dataset.hex === clean);
+                return { ok: true, hex: clean, key: closest?.dataset.key || 'Valid Key', val };
+            }
+
+            function render(res, hex) {
+                if (!res.ok) {
+                    result.innerHTML = `
+                        <div class="flex items-start gap-3">
+                            <div class="w-5 h-5 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgb(248 113 113)" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                            </div>
+                            <div>
+                                <div class="text-red-400 font-semibold tracking-wide malicious">[MALICIOUS BEHAVIOR DETECTED]</div>
+                                <div class="mt-1.5 text-slate-400">Input <span class="text-white">${hex}</span> → ${res.reason}. Parser abort.</div>
+                                <div class="mt-2 text-[11px] text-slate-500">ChromaFirewall::validate() returned false</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="flex items-start gap-3">
+                            <div class="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgb(52 211 153)" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+                            </div>
+                            <div>
+                                <div class="text-emerald-400 font-semibold tracking-wide">✓ VALIDATED — PASS</div>
+                                <div class="mt-1.5 text-slate-400">Input <span class="text-white">${res.hex}</span> → Allowed. Key: <span class="text-cyan-300">${res.key}</span></div>
+                                <div class="mt-2 text-[11px] text-slate-500">0x${res.val.toString(16).toUpperCase().padStart(6,'0')} within [0x4B5753 – 0xF8F8F8]</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            function run() {
+                const hex = input.value;
+                const res = validate(hex);
+                render(res, hex);
+                // Highlight in matrix
+                document.querySelectorAll('.matrix-cell').forEach(c => {
+                    c.style.outline = c.dataset.hex === hex.toUpperCase() ? '2px solid #22d3ee' : 'none';
+                });
+            }
+
+            btn.addEventListener('click', run);
+            input.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+            input.addEventListener('input', e => {
+                let v = e.target.value.toUpperCase();
+                if (!v.startsWith('#') && v.length > 0) v = '#' + v.replace(/[^0-9A-F]/g, '');
+                v = v.replace(/[^#0-9A-F]/g, '').slice(0,7);
+                e.target.value = v;
+            });
+            presets.forEach(p => p.addEventListener('click', () => {
+                input.value = p.dataset.hex;
+                run();
+            }));
+
+            // Initial
+            run();
+        });
+    </script>
+<script>(function(){document.addEventListener("click",function(e){var a=e.target.closest("[data-product-id]");if(!a)return;e.preventDefault();var pid=a.getAttribute("data-product-id");if(pid)parent.postMessage({type:"ecto-artifact-link-click",productId:pid},"*")})})();</script>
+<script>(function(){document.addEventListener("click",function(e){var a=e.target.closest("[data-product-id]");if(!a)return;e.preventDefault();var pid=a.getAttribute("data-product-id");if(pid)parent.postMessage({type:"ecto-artifact-link-click",productId:pid},"*")})})();</script>
+</body>
+</html>
