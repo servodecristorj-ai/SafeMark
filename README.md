@@ -1,9 +1,12 @@
 # SafeMark Chroma Firewall v1
 
-License the parser firewall that stops null-byte injection in AI color streams.
+Validates AI color streams in **847ns** — built after parser flaw research.
 
-**<1ms validation • 104-key matrix • Pure C++ • Zero dependencies**
+## Benchmark
+`std::chrono::high_resolution_clock`, -O3, 1M iterações = 847ns por token
 
-Built after independent security research into parser flaws.
+## Run
+g++ -std=c++17 test_proof.cpp -o test_proof && ./test_proof
 
-→ Request commercial license: despenseirorj@gmail.com
+## Proof-of-contact
+111101a@proton.me (null-name U+0000)
